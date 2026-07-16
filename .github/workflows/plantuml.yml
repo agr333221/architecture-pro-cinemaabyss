@@ -1,0 +1,39 @@
+name: Generate PlantUML Diagrams
+
+on:
+  push:
+    paths:
+      - '**.puml'
+      - '.github/workflows/plantuml.yml'
+  pull_request:
+    paths:
+      - '**.puml'
+      - '.github/workflows/plantuml.yml'
+
+jobs:
+  plantuml:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate SVG from all .puml files
+        run: |
+          mkdir -p docs/schemas
+          # Найти все .puml файлы и сгенерировать SVG
+          find . -name "*.puml" -type f | while read file; do
+            echo "Processing $file"
+            docker run --rm -v "$(pwd):/data" plantuml/plantuml -tsvg "/data/$file"
+          done
+
+      - name: Commit and push generated SVG files
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: auto-generate PlantUML diagrams"
+          branch: ${{ github.head_ref }}
+          commit_user_name: github-actions[bot]
+          commit_user_email: github-actions[bot]@users.noreply.github.com
