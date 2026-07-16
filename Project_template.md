@@ -12,7 +12,7 @@
 
 ![Диаграмма контейнеров ](docs/schemas/containers.svg)
 
-Описание: [docs/to-be-architecture.md](docs/to-be-architecture.md))
+Описание: [docs/to-be-architecture.md](docs/to-be-architecture.md)
 
 **Решение.**
 Система разделена на домены:
@@ -487,7 +487,7 @@ https://cinemaabyss.example.com/api/movies
 - [events-service.yaml](src/kubernetes/helm/templates/services/events-service.yaml) — Deployment (аналогично, probes `/api/events/health`, `KAFKA_BROKERS` из configmap) и Service (8082);
 - в [templates/configmap.yaml](src/kubernetes/helm/templates/configmap.yaml) исправлен `MOVIES_SERVICE_URL` (`http://movies:...` -> `http://movies-service:...` — сервис называется movies-service) и добавлены `EVENTS_SERVICE_URL`, `KAFKA_BROKERS`.
 
-![Helm deploy и вывод /api/movies (docs/screenshots/helm-list-pods-curl.png)
+![Helm deploy и вывод /api/movies](docs/screenshots/helm-list-pods-curl.png)
 
 # Задание 5
 Компания планирует активно развиваться и для повышения надежности, безопасности, реализации сетевых паттернов типа Circuit Breaker и канареечного деплоя вам как архитектору необходимо развернуть istio и настроить circuit breaker для monolith и movies сервисов.
