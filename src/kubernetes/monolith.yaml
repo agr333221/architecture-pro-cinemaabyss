@@ -1,4 +1,4 @@
-apiVersion: apps/v1
+﻿apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: monolith
@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
       - name: monolith
-        image:  ghcr.io/db-exp/cinemaabysstest/monolith:latest
+        image:  ghcr.io/agr333221/architecture-pro-cinemaabyss/monolith:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080

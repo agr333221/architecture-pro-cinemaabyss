@@ -7,7 +7,12 @@
 Результат представьте в виде контейнерной диаграммы в нотации С4.
 Добавьте ссылку на файл в этот шаблон
 
-[Диаграмма контейнеров C4 (To-Be) — docs/containers.puml](docs/containers.puml) (отрендеренный PNG: [docs/containers.png](docs/containers.png), описание решения: [docs/to-be-architecture.md](docs/to-be-architecture.md))
+
+Диаграмма контейнеров в нотации С4 (PlantUML): **[docs/schemas/containers.puml](docs/schemas/containers.puml)**,
+
+![Диаграмма контейнеров ](docs/schemas/containers.svg)
+
+Описание: [docs/to-be-architecture.md](docs/to-be-architecture.md))
 
 **Решение.**
 Система разделена на домены:
@@ -128,7 +133,8 @@
 Скриншоты (тесты и топики Kafka из UI http://localhost:8090):
 
 ![Postman тесты](docs/screenshots/postman-tests.png)
-![Kafka топики](docs/screenshots/kafka-topics.png)
+![Kafka топики 1](docs/screenshots/kafka01.png)
+![Kafka топики 2](docs/screenshots/kafka02.png)
 
 
 ## Задание 3
@@ -211,7 +217,7 @@ jobs:
 
 3. Добавьте в секрет src/kubernetes/dockerconfigsecret.yaml в поле
 ```bash
- .dockerconfigjson: значение в base64 файла ~/.docker/config.json
+ .dockerconfigjson: значение в base64 файла ~/.docker/config.json         	
 ```
 
 4. Если в ~/.docker/config.json нет значения для аутентификации
@@ -370,14 +376,33 @@ cat .docker/config.json | base64
 - [src/kubernetes/ingress.yaml](src/kubernetes/ingress.yaml) — добавлен маршрут `/` -> `proxy-service:8000` (единая точка входа, все запросы включая `/api/movies` идут через прокси); маршрут `/api/events` -> `events-service:8082` оставлен для прямой проверки создания событий тестами;
 - [src/kubernetes/configmap.yaml](src/kubernetes/configmap.yaml) — добавлены `EVENTS_SERVICE_URL` и `KAFKA_BROKERS`.
 
-Перед применением нужно заменить путь к образам `ghcr.io/db-exp/cinemaabysstest/*` на путь своего репозитория и заполнить `dockerconfigsecret.yaml` (шаг 1). Дальнейшее развертывание — по шагам 1–12 выше (namespace -> configmap/secrets -> postgres -> kafka -> monolith -> микросервисы -> proxy -> ingress -> minikube tunnel).
+Заменил путь к образам на `ghcr.io/agr3332211/architecture-pro-cinemaabyss/*` на путь своего репозитория
+`dockerconfigsecret.yaml` - вставил PAT и добавил в .gitignore 
+- `src/kubernetes/dockerconfigsecret.yaml`
+- `src/kubernetes/helm/values.yaml`
+
+
+ Дальше по шагам 1–12:
+ namespace > configmap/secrets > postgres > kafka > monolith > микросервисы > proxy > ingress > minikube tunnel.
+
+NB! Вместо 8:
+```
+kubectl get ingressclass
+```
+
+![Запуск](docs/screenshots/kuber01.png)
+
+![pods](docs/screenshots/kuber02.png)
+
+
+
 
 #### Шаг 3
 Добавьте сюда скриншота вывода при вызове https://cinemaabyss.example.com/api/movies и  скриншот вывода event-service после вызова тестов.
 
 ![Вывод /api/movies](docs/screenshots/k8s-api-movies.png)
-![Логи event-service](docs/screenshots/k8s-events-logs.png)
 
+![Логи event-service](docs/screenshots/k8s-events-logs.png )
 
 ## Задание 4
 Для простоты дальнейшего обновления и развертывания вам как архитектуру
@@ -454,17 +479,15 @@ minikube tunnel
 https://cinemaabyss.example.com/api/movies
 и приложите скриншот развертывания helm и вывода https://cinemaabyss.example.com/api/movies
 
-**Решение.** Заполнены Helm-шаблоны в [src/kubernetes/helm/templates/services/](src/kubernetes/helm/templates/services/):
+**Решение.**
+
+ Заполнены Helm-шаблоны в [src/kubernetes/helm/templates/services/](src/kubernetes/helm/templates/services/):
 
 - [proxy-service.yaml](src/kubernetes/helm/templates/services/proxy-service.yaml) — Deployment (образ/теги/pullPolicy, replicas и resources из `values.yaml`, `PORT` из `proxyService.service.targetPort`, envFrom `cinemaabyss-config`, probes `/health`) и Service (`port: 80` -> `targetPort: 8000`);
 - [events-service.yaml](src/kubernetes/helm/templates/services/events-service.yaml) — Deployment (аналогично, probes `/api/events/health`, `KAFKA_BROKERS` из configmap) и Service (8082);
 - в [templates/configmap.yaml](src/kubernetes/helm/templates/configmap.yaml) исправлен `MOVIES_SERVICE_URL` (`http://movies:...` -> `http://movies-service:...` — сервис называется movies-service) и добавлены `EVENTS_SERVICE_URL`, `KAFKA_BROKERS`.
 
-Чарт проходит `helm lint` (0 failed) и `helm template` рендерит Deployment/Service для proxy-service и events-service и ingress с маршрутами `/` -> proxy-service и `/api/events` -> events-service. В `values.yaml` перед установкой замените `ghcr.io/db-exp/cinemaabysstest/*` на путь к своим образам и подставьте свое значение `imagePullSecrets.dockerconfigjson`.
-
-![Helm deploy](docs/screenshots/helm-deploy.png)
-![Вывод /api/movies через helm](docs/screenshots/helm-api-movies.png)
-
+![Helm deploy и вывод /api/movies (docs/screenshots/helm-list-pods-curl.png)
 
 # Задание 5
 Компания планирует активно развиваться и для повышения надежности, безопасности, реализации сетевых паттернов типа Circuit Breaker и канареечного деплоя вам как архитектору необходимо развернуть istio и настроить circuit breaker для monolith и movies сервисов.

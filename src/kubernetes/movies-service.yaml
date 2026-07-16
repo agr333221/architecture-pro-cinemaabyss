@@ -1,4 +1,4 @@
-apiVersion: apps/v1
+﻿apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: movies-service
@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
       - name: movies-service
-        image: ghcr.io/db-exp/cinemaabysstest/movies-service:latest
+        image: ghcr.io/agr333221/architecture-pro-cinemaabyss/movies-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8081

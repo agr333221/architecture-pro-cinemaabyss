@@ -1,4 +1,4 @@
-apiVersion: apps/v1
+﻿apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: events-service
@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
       - name: events-service
-        image: ghcr.io/db-exp/cinemaabysstest/events-service:latest
+        image: ghcr.io/agr333221/architecture-pro-cinemaabyss/events-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8082

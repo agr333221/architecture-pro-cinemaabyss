@@ -1,4 +1,4 @@
-apiVersion: apps/v1
+﻿apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: proxy-service
@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
       - name: proxy-service
-        image: ghcr.io/db-exp/cinemaabysstest/proxy-service:latest
+        image: ghcr.io/agr333221/architecture-pro-cinemaabyss/proxy-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8000

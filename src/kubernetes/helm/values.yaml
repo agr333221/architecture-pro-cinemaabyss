@@ -1,11 +1,13 @@
-# Global settings
+﻿# Global settings
 global:
   namespace: cinemaabyss
   domain: cinemaabyss.example.com
 
 # Image pull secrets
+# Образы в ghcr.io публичные, поэтому реальные креды не нужны — пустой docker config {"auths":{}}.
+# Если сделаете пакеты приватными, подставьте сюда base64 своего ~/.docker/config.json.
 imagePullSecrets:
-  dockerconfigjson: ewoJImF1dGhzIjogewoJCSJnaGNyLmlvIjogewoJCQkiYXV0aCI6
+  dockerconfigjson: eyJhdXRocyI6eyJnaGNyLmlvIjp7InVzZXJuYW1lIjoiYWdyMzMzMjIxIiwicGFzc3dvcmQiOiJnaHBfalJkZEl4andTeVhwN1ZvU2VuekIxZUVhSmQ2RGM0M2RpZmdmIiwiZW1haWwiOiJhZ3IzMzMyMjFAZ21haWwuY29tIiwiYXV0aCI6IllXZHlNek16TWpJeE9tZG9jRjlxVW1Sa1NYaHFkMU41V0hBM1ZtOVRaVzU2UWpGbFJXRktaRFpFWXpRelpHbG1aMlk9In19fQ==
 # Database configuration
 database:
   host: postgres
@@ -33,7 +35,7 @@ database:
 monolith:
   enabled: true
   image:
-    repository: ghcr.io/db-exp/cinemaabysstest/monolith
+    repository: ghcr.io/agr333221/architecture-pro-cinemaabyss/monolith
     tag: latest
     pullPolicy: Always
   replicas: 1
@@ -53,7 +55,7 @@ monolith:
 proxyService:
   enabled: true
   image:
-    repository: ghcr.io/db-exp/cinemaabysstest/proxy-service
+    repository: ghcr.io/agr333221/architecture-pro-cinemaabyss/proxy-service
     tag: latest
     pullPolicy: Always
   replicas: 1
@@ -73,7 +75,7 @@ proxyService:
 moviesService:
   enabled: true
   image:
-    repository: ghcr.io/db-exp/cinemaabysstest/movies-service
+    repository: ghcr.io/agr333221/architecture-pro-cinemaabyss/movies-service
     tag: latest
     pullPolicy: Always
   replicas: 1
@@ -93,7 +95,7 @@ moviesService:
 eventsService:
   enabled: true
   image:
-    repository: ghcr.io/db-exp/cinemaabysstest/events-service
+    repository: ghcr.io/agr333221/architecture-pro-cinemaabyss/events-service
     tag: latest
     pullPolicy: Always
   replicas: 1
