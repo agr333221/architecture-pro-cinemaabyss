@@ -2,19 +2,36 @@
 
 ## Задание 1
 
-1. Спроектируйте to be архитектуру КиноБездны, разделив всю систему на отдельные домены и организовав интеграционное взаимодействие и единую точку вызова сервисов.
+1. Спроектируйте to be архитектуру КиноБездны, разделив всю систему на отдельные
+ домены и организовав интеграционное взаимодействие и единую точку вызова сервисов.
 Результат представьте в виде контейнерной диаграммы в нотации С4.
 Добавьте ссылку на файл в этот шаблон
-[ссылка на файл](ссылка)
 
+[Диаграмма контейнеров C4 (To-Be) — docs/containers.puml](docs/containers.puml) (отрендеренный PNG: [docs/containers.png](docs/containers.png), описание решения: [docs/to-be-architecture.md](docs/to-be-architecture.md))
+
+**Решение.**
+Система разделена на домены:
+- Movies (вынесен в movies-service)
+- Events (новый events-service на Kafka)
+- Users/Payments/Subscriptions (пока в монолите, следующие кандидаты на выделение).
+- Единая точка вызова — API Gateway (proxy-service, паттерн Strangler Fig):
+  весь клиентский трафик идет через Ingress -> proxy-service, который постепенно
+  переключает трафик с монолита на микросервисы по фиче-флагу `GRADUAL_MIGRATION`
+  и проценту `MOVIES_MIGRATION_PERCENT`. Асинхронное интеграционное взаимодействие — через
+  Kafka (топики `movie-events`, `user-events`, `payment-events`).
 
 ## Задание 2
 
 ### 1. Proxy
-Команда КиноБездны уже выделила сервис метаданных о фильмах movies и вам необходимо реализовать бесшовный переход с применением паттерна Strangler Fig в части реализации прокси-сервиса (API Gateway), с помощью которого можно будет постепенно переключать траффик, используя фиче-флаг.
+Команда КиноБездны уже выделила сервис метаданных о фильмах movies
+ и вам необходимо реализовать бесшовный переход с применением
+ паттерна Strangler Fig в части реализации прокси-сервиса (API Gateway),
+ с помощью которого можно будет постепенно переключать траффик,
+ используя фиче-флаг.
 
 
 Реализуйте сервис на любом языке программирования в ./src/microservices/proxy.
+
 Конфигурация для запуска сервиса через docker-compose уже добавлена
 ```yaml
   proxy-service:
@@ -45,19 +62,73 @@
    ```bash
    curl http://localhost:8000/api/movies
    ```
-- Протестируйте постепенный переход, изменив переменную окружения MOVIES_MIGRATION_PERCENT в файле docker-compose.yml.
+- Протестируйте постепенный переход, изменив переменную окружения
+ MOVIES_MIGRATION_PERCENT в файле docker-compose.yml.
+
+**Решение.**
+ Прокси-сервис реализован на Python (Flask + requests)
+ в [src/microservices/proxy/app.py](src/microservices/proxy/app.py):
+
+- `/health` — health-check прокси (200, `Strangler Fig Proxy is healthy`);
+- `/api/movies*` — при `GRADUAL_MIGRATION=true` случайные `MOVIES_MIGRATION_PERCENT`% запросов
+  уходят в movies-service, остальные — в монолит; при выключенном флаге весь трафик movies
+  идет в микросервис; `/api/movies/health` всегда маршрутизируется в movies-service;
+- `/api/events*` — проксируется в events-service;
+- все остальные пути (`/api/users`, `/api/payments`, `/api/subscriptions`, …) — в монолит.
+
+Прокси пересылает метод, query-параметры,
+ тело и заголовки (кроме hop-by-hop),
+ при недоступности бэкенда возвращает 502.
+
+ Результаты проверки:
+
+- postman-тесты: **22 запроса, 42 assertions, 0 ошибок** (все зеленые, включая events)
+— лог прогона: [docs/postman-local-tests.txt](docs/postman-local-tests.txt)
+
+- `curl http://localhost:8000/api/movies` возвращает список фильмов;
+- при `MOVIES_MIGRATION_PERCENT=50` фактическое распределение 20+ запросов
+  по логам прокси: ~50/50 между monolith и movies-service
+  (проверено подсчетом строк `GET /api/movies -> <backend>` в логе),
+  при `100` — весь трафик в movies-service.
 
 ### 2. Kafka
- Вам как архитектуру нужно также проверить гипотезу насколько просто реализовать применение Kafka в данной архитектуре.
+ Вам как архитектуру нужно также проверить гипотезу насколько
+ просто реализовать применение Kafka в данной архитектуре.
 
-Для этого нужно сделать MVP сервис events, который будет при вызове API создавать и сам же читать сообщения в топике Kafka.
+Для этого нужно сделать MVP сервис events, который будет при вызове API создавать
+ и сам же читать сообщения в топике Kafka.
 
     - Разработайте сервис на любом языке программирования с consumer'ами и producer'ами.
     - Реализуйте простой API, при вызове которого будут создаваться события User/Payment/Movie и обрабатываться внутри сервиса с записью в лог
     - Добавьте в docker-compose новый сервис, kafka там уже есть
 
 Необходимые тесты для проверки этого API вызываются при запуске npm run test:local из папки tests/postman 
-Приложите скриншот тестов и скриншот состояния топиков Kafka http://localhost:8090 
+
+!!! Приложите скриншот тестов и скриншот состояния топиков Kafka http://localhost:8090 
+
+**Решение.**
+ Events-сервис реализован на Python (Flask + kafka-python)
+ в [src/microservices/events/app.py](src/microservices/events/app.py):
+
+- producer: `POST /api/events/movie|user|payment` валидирует обязательные поля,
+  формирует событие `{id, type, timestamp, payload}` и
+  публикует его в соответствующий топик (`movie-events`, `user-events`, `payment-events`),
+  в ответ возвращает 201 с `{status: "success", partition, offset, event}`
+  согласно api-specification.yaml
+- consumer: фоновый поток с consumer-group `events-service` читает все три топика
+ и пишет обработку каждого события в лог сервиса (`Processed event from topic=... partition=... offset=...`)
+- `GET /api/events/health` возвращает `{"status": true}`
+
+Сервис уже был описан в docker-compose.yml
+ (events-service, порт 8082, `KAFKA_BROKERS=kafka:9092`).
+ Проверено: событие публикуется (partition=0, offset растет),
+ consumer его обрабатывает и логирует.
+ Все postman-тесты Events Microservice зеленые.
+
+Скриншоты (тесты и топики Kafka из UI http://localhost:8090):
+
+![Postman тесты](docs/screenshots/postman-tests.png)
+![Kafka топики](docs/screenshots/kafka-topics.png)
 
 
 ## Задание 3
@@ -70,7 +141,9 @@
 
 ### CI/CD
 
- В папке .github/worflows доработайте деплой новых сервисов proxy и events в docker-build-push.yml , чтобы api-tests при сборке отрабатывали корректно при отправке коммита в вашу новую ветку.
+ В папке .github/worflows доработайте деплой новых сервисов proxy
+ и events в docker-build-push.yml , чтобы api-tests при сборке отрабатывали
+ корректно при отправке коммита в вашу новую ветку.
 
 Нужно доработать 
 ```yaml
@@ -84,6 +157,7 @@ on:
     types: [published]
 ```
 и добавить необходимые шаги в блок
+
 ```yaml
 jobs:
   build-and-push:
@@ -107,8 +181,18 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
 ```
-Как только сборка отработает и в github registry появятся ваши образы, можно переходить к блоку настройки Kubernetes
+
+Как только сборка отработает и в github registry появятся
+ ваши образы, можно переходить к блоку настройки Kubernetes
 Успешным результатом данного шага является "зеленая" сборка и "зеленые" тесты
+
+**Решение.**
+
+ В [.github/workflows/docker-build-push.yml](.github/workflows/docker-build-push.yml):
+
+- триггер `push.branches` расширен до `[ main, cinema ]` — сборка запускается при коммите в ветку задания;
+- добавлены шаги `Extract metadata` + `Build and push` для **events-service** (context `./src/microservices/events`) и **proxy-service** (context `./src/microservices/proxy`) по аналогии с monolith/movies — образы публикуются в `ghcr.io/<owner>/<repo>/events-service` и `.../proxy-service` с тегами `latest`, `sha`, имя ветки;
+- в [.github/workflows/api-tests.yml](.github/workflows/api-tests.yml) триггер расширен до `[ main, master, cinema ]`; workflow поднимает весь стек через docker compose и прогоняет newman-тесты в контейнере — локальный прогон этого же сценария зеленый (22/22 запросов, 42/42 assertions).
 
 
 ### Proxy в Kubernetes
@@ -117,12 +201,14 @@ jobs:
 Для деплоя в kubernetes необходимо залогиниться в docker registry Github'а.
 1. Создайте Personal Access Token (PAT) https://github.com/settings/tokens . Создавайте class с правом read:packages
 2. В src/kubernetes/*.yaml (event-service, monolith, movies-service и proxy-service)  отредактируйте путь до ваших образов 
+
 ```bash
  spec:
       containers:
       - name: events-service
         image: ghcr.io/ваш логин/имя репозитория/events-service:latest
 ```
+
 3. Добавьте в секрет src/kubernetes/dockerconfigsecret.yaml в поле
 ```bash
  .dockerconfigjson: значение в base64 файла ~/.docker/config.json
@@ -203,25 +289,31 @@ cat .docker/config.json | base64
   ```
 
   Проверьте, теперь должно быть запущено 3 пода, если что-то не так, то посмотрите логи
+
   ```bash
   kubectl -n cinemaabyss logs имя_пода (например - kafka-0)
   ```
 
   5. Разверните монолит:
+
   ```bash
   kubectl apply -f src/kubernetes/monolith.yaml
   ```
+
   6. Разверните микросервисы:
+
   ```bash
   kubectl apply -f src/kubernetes/movies-service.yaml
   kubectl apply -f src/kubernetes/events-service.yaml
   ```
+
   7. Разверните прокси-сервис:
   ```bash
   kubectl apply -f src/kubernetes/proxy-service.yaml
   ```
 
   После запуска и поднятия подов вывод команды 
+
   ```bash
   kubectl -n cinemaabyss get pod
   ```
@@ -271,12 +363,25 @@ cat .docker/config.json | base64
   Часть тестов с health-чек упадет, но создание событий отработает.
   Откройте логи event-service и сделайте скриншот обработки событий
 
+**Решение (Шаг 2).** Доработаны манифесты:
+
+- [src/kubernetes/proxy-service.yaml](src/kubernetes/proxy-service.yaml) — Deployment (образ `proxy-service:latest`, порт 8000, env из `cinemaabyss-config` + `EVENTS_SERVICE_URL`, probes на `/health`, `imagePullSecrets: dockerconfigjson`) и Service (ClusterIP 8000);
+- [src/kubernetes/events-service.yaml](src/kubernetes/events-service.yaml) — Deployment (образ `events-service:latest`, порт 8082, `KAFKA_BROKERS=kafka:9092`, probes на `/api/events/health`) и Service (ClusterIP 8082);
+- [src/kubernetes/ingress.yaml](src/kubernetes/ingress.yaml) — добавлен маршрут `/` -> `proxy-service:8000` (единая точка входа, все запросы включая `/api/movies` идут через прокси); маршрут `/api/events` -> `events-service:8082` оставлен для прямой проверки создания событий тестами;
+- [src/kubernetes/configmap.yaml](src/kubernetes/configmap.yaml) — добавлены `EVENTS_SERVICE_URL` и `KAFKA_BROKERS`.
+
+Перед применением нужно заменить путь к образам `ghcr.io/db-exp/cinemaabysstest/*` на путь своего репозитория и заполнить `dockerconfigsecret.yaml` (шаг 1). Дальнейшее развертывание — по шагам 1–12 выше (namespace -> configmap/secrets -> postgres -> kafka -> monolith -> микросервисы -> proxy -> ingress -> minikube tunnel).
+
 #### Шаг 3
 Добавьте сюда скриншота вывода при вызове https://cinemaabyss.example.com/api/movies и  скриншот вывода event-service после вызова тестов.
 
+![Вывод /api/movies](docs/screenshots/k8s-api-movies.png)
+![Логи event-service](docs/screenshots/k8s-events-logs.png)
+
 
 ## Задание 4
-Для простоты дальнейшего обновления и развертывания вам как архитектуру необходимо так же реализовать helm-чарты для прокси-сервиса и проверить работу 
+Для простоты дальнейшего обновления и развертывания вам как архитектуру
+ необходимо так же реализовать helm-чарты для прокси-сервиса и проверить работу 
 
 Для этого:
 1. Перейдите в директорию helm и отредактируйте файл values.yaml
@@ -349,6 +454,17 @@ minikube tunnel
 https://cinemaabyss.example.com/api/movies
 и приложите скриншот развертывания helm и вывода https://cinemaabyss.example.com/api/movies
 
+**Решение.** Заполнены Helm-шаблоны в [src/kubernetes/helm/templates/services/](src/kubernetes/helm/templates/services/):
+
+- [proxy-service.yaml](src/kubernetes/helm/templates/services/proxy-service.yaml) — Deployment (образ/теги/pullPolicy, replicas и resources из `values.yaml`, `PORT` из `proxyService.service.targetPort`, envFrom `cinemaabyss-config`, probes `/health`) и Service (`port: 80` -> `targetPort: 8000`);
+- [events-service.yaml](src/kubernetes/helm/templates/services/events-service.yaml) — Deployment (аналогично, probes `/api/events/health`, `KAFKA_BROKERS` из configmap) и Service (8082);
+- в [templates/configmap.yaml](src/kubernetes/helm/templates/configmap.yaml) исправлен `MOVIES_SERVICE_URL` (`http://movies:...` -> `http://movies-service:...` — сервис называется movies-service) и добавлены `EVENTS_SERVICE_URL`, `KAFKA_BROKERS`.
+
+Чарт проходит `helm lint` (0 failed) и `helm template` рендерит Deployment/Service для proxy-service и events-service и ingress с маршрутами `/` -> proxy-service и `/api/events` -> events-service. В `values.yaml` перед установкой замените `ghcr.io/db-exp/cinemaabysstest/*` на путь к своим образам и подставьте свое значение `imagePullSecrets.dockerconfigjson`.
+
+![Helm deploy](docs/screenshots/helm-deploy.png)
+![Вывод /api/movies через helm](docs/screenshots/helm-api-movies.png)
+
 
 # Задание 5
 Компания планирует активно развиваться и для повышения надежности, безопасности, реализации сетевых паттернов типа Circuit Breaker и канареечного деплоя вам как архитектору необходимо развернуть istio и настроить circuit breaker для monolith и movies сервисов.
@@ -414,6 +530,24 @@ You can see 21 for the upstream_rq_pending_overflow value which means 21 calls s
 ```
 
 Приложите скриншот работы circuit breaker'а
+
+**Решение.** Создан [src/kubernetes/circuit-breaker-config.yaml](src/kubernetes/circuit-breaker-config.yaml) — две `DestinationRule` (Istio) для хостов `monolith` и `movies-service`:
+
+- `connectionPool.tcp.maxConnections: 1`, `http.http1MaxPendingRequests: 1`, `maxRequestsPerConnection: 1` — при конкурентной нагрузке (fortio `-c 50`) лишние запросы мгновенно отбрасываются Envoy с кодом 503 — это и есть срабатывание circuit breaker;
+- `outlierDetection` (`consecutive5xxErrors: 1`, `interval: 1s`, `baseEjectionTime: 3m`, `maxEjectionPercent: 100`) — инстансы, отвечающие 5xx, временно исключаются из балансировки.
+
+Порядок применения — по командам выше:
+ установка Istio (base, ingressgateway, istiod),
+ установка чарта,
+ включение sidecar-injection для namespace (`istio-injection=enabled`, поды нужно пересоздать после включения),
+ затем `kubectl apply -f src/kubernetes/circuit-breaker-config.yaml -n cinemaabyss`.
+ Проверка — fortio load `-c 50 -qps 0 -n 500`
+  на `http://movies-service:8081/api/movies`: значительная доля ответов 503,
+  счетчики `upstream_rq_pending_total` / `upstream_rq_pending_overflow`
+  в статистике istio-proxy показывают срабатывания circuit breaker.
+
+![Fortio статистика](docs/screenshots/istio-fortio.png)
+![Circuit breaker stats](docs/screenshots/istio-cb-stats.png)
 
 Удаляем все
 ```bash

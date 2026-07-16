@@ -1,0 +1,11 @@
+﻿Состояние топиков Kafka (Kafka UI API, http://localhost:8090), 2026-07-07 08:39:
+
+
+name           partitionCount messages
+----           -------------- --------
+movie-events                1        4
+payment-events              1        2
+user-events                 1        2
+
+
+
